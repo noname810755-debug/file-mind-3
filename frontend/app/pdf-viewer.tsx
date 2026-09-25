@@ -1,0 +1,247 @@
+import { useQuery } from "@tanstack/react-query";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import * as Sharing from "expo-sharing";
+import React, { useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Platform, Pressable, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { WebView } from "react-native-webview";
+
+import { useDialog } from "@/src/components/dialog";
+import { useToast } from "@/src/components/toast";
+import { Icon } from "@/src/icons";
+import { haptic } from "@/src/components/ui";
+import { createTextPdf } from "@/src/lib/pdf";
+import { baseName } from "@/src/lib/format";
+import { parentOf, writeText, joinDir, uniqueName } from "@/src/lib/fs";
+import { ensurePdfJs, viewerUri } from "@/src/lib/pdfjs";
+import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
+
+export default function PdfViewer() {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const dialog = useDialog();
+  const toast = useToast();
+  const { uri, name } = useLocalSearchParams<{ uri: string; name: string }>();
+  const webRef = useRef<WebView>(null);
+
+  const [pages, setPages] = useState(0);
+  const [scale, setScale] = useState(1);
+  const [docText, setDocText] = useState("");
+  const [pageTexts, setPageTexts] = useState<string[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const ready = useQuery({
+    queryKey: ["pdfjs-ready"],
+    queryFn: ensurePdfJs,
+  });
+
+  const injected = useMemo(() => `window.__PDF_URL__=${JSON.stringify(uri)};true;`, [uri]);
+
+  const post = (obj: any) => webRef.current?.postMessage(JSON.stringify(obj));
+
+  const onMessage = (e: any) => {
+    try {
+      const msg = JSON.parse(e.nativeEvent.data);
+      if (msg.type === "loaded") setPages(msg.pages);
+      else if (msg.type === "text") {
+        setDocText(msg.text || "");
+        setPageTexts(msg.pages || []);
+      } else if (msg.type === "error") setError(msg.message || "Failed to render PDF");
+    } catch {}
+  };
+
+  const zoom = (dir: 1 | -1) => {
+    const next = Math.min(3, Math.max(0.5, +(scale + dir * 0.25).toFixed(2)));
+    setScale(next);
+    post({ type: "zoom", scale: next });
+  };
+
+  const runSearch = (text: string) => {
+    if (!text) return;
+    const idx = pageTexts.findIndex((t) => t.toLowerCase().includes(text.toLowerCase()));
+    if (idx >= 0) {
+      post({ type: "goto", page: idx + 1 });
+      toast.show(`Found on page ${idx + 1}`, "success");
+    } else {
+      toast.show("No matches", "info");
+    }
+  };
+
+  const extractText = async () => {
+    if (!docText.trim()) return toast.show("No selectable text in this PDF", "info");
+    const v = await dialog.actions({
+      title: "Extract text",
+      options: [
+        { label: "Save as .txt", icon: "file-document-outline", value: "txt" },
+        { label: "Save as text PDF", icon: "file-pdf-box", value: "pdf" },
+        { label: "Share text", icon: "share-variant", value: "share" },
+      ],
+    });
+    const dir = parentOf(uri);
+    const base = baseName(name || "document");
+    if (v === "txt") {
+      const fn = await uniqueName(dir, `${base}.txt`);
+      await writeText(joinDir(dir, fn), docText);
+      toast.show("Saved as text file", "success");
+    } else if (v === "pdf") {
+      await createTextPdf(docText, dir, `${base}_text`);
+      toast.show("Saved as text PDF", "success");
+    } else if (v === "share") {
+      const tmp = (await import("@/src/lib/fs")).TMP + `${base}.txt`;
+      await writeText(tmp, docText);
+      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(tmp);
+    }
+  };
+
+  return (
+    <View style={styles.screen}>
+      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
+        <Pressable testID="viewer-back" onPress={() => router.back()} hitSlop={10} style={styles.hBtn}>
+          <Icon name="chevron-left" size={28} color={colors.onSurface} />
+        </Pressable>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title} numberOfLines={1}>
+            {name}
+          </Text>
+          {pages > 0 && <Text style={styles.sub}>{pages} pages</Text>}
+        </View>
+        <Pressable testID="viewer-search" onPress={() => { haptic(); setSearchOpen((s) => !s); }} hitSlop={8} style={styles.hBtn}>
+          <Icon name="magnify" size={23} color={colors.onSurface} />
+        </Pressable>
+        <Pressable testID="viewer-extract" onPress={extractText} hitSlop={8} style={styles.hBtn}>
+          <Icon name="text-recognition" size={23} color={colors.onSurface} />
+        </Pressable>
+        <Pressable
+          testID="viewer-share"
+          onPress={async () => {
+            if (await Sharing.isAvailableAsync()) Sharing.shareAsync(uri);
+          }}
+          hitSlop={8}
+          style={styles.hBtn}
+        >
+          <Icon name="share-variant" size={22} color={colors.onSurface} />
+        </Pressable>
+      </View>
+
+      {searchOpen && (
+        <View style={styles.searchBar}>
+          <Icon name="magnify" size={20} color={colors.muted} />
+          <TextInput
+            testID="viewer-search-input"
+            style={styles.searchInput}
+            value={q}
+            onChangeText={setQ}
+            placeholder="Search in document"
+            placeholderTextColor={colors.muted}
+            onSubmitEditing={() => runSearch(q)}
+            returnKeyType="search"
+            autoFocus
+          />
+        </View>
+      )}
+
+      <View style={styles.body}>
+        {Platform.OS === "web" ? (
+          <View style={styles.center}>
+            <Icon name="cellphone" size={40} color={colors.muted} />
+            <Text style={styles.centerText}>Open the app on your device to view PDFs.</Text>
+          </View>
+        ) : ready.isLoading || !ready.data ? (
+          <View style={styles.center}>
+            <ActivityIndicator color={colors.brandPrimary} />
+            <Text style={styles.centerText}>Preparing PDF engine…</Text>
+          </View>
+        ) : !ready.data.ready ? (
+          <View style={styles.center}>
+            <Icon name="wifi-off" size={40} color={colors.muted} />
+            <Text style={styles.centerText}>
+              First-time setup needs internet once to prepare the offline PDF engine. Connect and reopen.
+            </Text>
+          </View>
+        ) : error ? (
+          <View style={styles.center}>
+            <Icon name="alert-circle-outline" size={40} color={colors.error} />
+            <Text style={styles.centerText}>{error}</Text>
+          </View>
+        ) : (
+          <WebView
+            ref={webRef}
+            testID="pdf-webview"
+            source={{ uri: viewerUri() }}
+            originWhitelist={["*"]}
+            injectedJavaScriptBeforeContentLoaded={injected}
+            onMessage={onMessage}
+            allowFileAccess
+            allowFileAccessFromFileURLs
+            allowUniversalAccessFromFileURLs
+            javaScriptEnabled
+            domStorageEnabled
+            style={{ flex: 1, backgroundColor: "#54565b" }}
+          />
+        )}
+      </View>
+
+      {pages > 0 && !error && Platform.OS !== "web" && (
+        <View style={[styles.zoomBar, { bottom: insets.bottom + spacing.lg }]}>
+          <Pressable testID="viewer-zoom-out" onPress={() => zoom(-1)} style={styles.zoomBtn}>
+            <Icon name="minus" size={22} color={colors.onSurface} />
+          </Pressable>
+          <Text style={styles.zoomText}>{Math.round(scale * 100)}%</Text>
+          <Pressable testID="viewer-zoom-in" onPress={() => zoom(1)} style={styles.zoomBtn}>
+            <Icon name="plus" size={22} color={colors.onSurface} />
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const useStyles = makeStyles((c) => ({
+  screen: { flex: 1, backgroundColor: c.surface },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingBottom: spacing.sm,
+    backgroundColor: c.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: c.divider,
+  },
+  hBtn: { padding: spacing.sm },
+  title: { fontSize: 16, fontWeight: "700", color: c.onSurface },
+  sub: { fontSize: 12, color: c.muted },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    margin: spacing.md,
+    backgroundColor: c.surfaceTertiary,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+  },
+  searchInput: { flex: 1, paddingVertical: spacing.md, fontSize: 15, color: c.onSurfaceTertiary },
+  body: { flex: 1 },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xxl, gap: spacing.md },
+  centerText: { fontSize: 14.5, color: c.muted, textAlign: "center", lineHeight: 21 },
+  zoomBar: {
+    position: "absolute",
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: c.surfaceSecondary,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderWidth: 1,
+    borderColor: c.border,
+    elevation: 5,
+  },
+  zoomBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  zoomText: { fontSize: 14, fontWeight: "700", color: c.onSurface, minWidth: 46, textAlign: "center" },
+}));
