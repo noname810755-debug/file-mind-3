@@ -1,8 +1,8 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
 import * as ImageManipulator from "expo-image-manipulator";
-import React, { useRef, useState } from "react";
-import { Image, Linking, Pressable, ScrollView, Text, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useDialog } from "@/src/components/dialog";
@@ -24,12 +24,21 @@ export default function Scanner() {
   const qc = useQueryClient();
 
   const [permission, requestPermission] = useCameraPermissions();
+  const askedPermission = useRef(false);
   const cameraRef = useRef<CameraView>(null);
   const [facing, setFacing] = useState<"back" | "front">("back");
   const [flash, setFlash] = useState<"off" | "on">("off");
   const [pages, setPages] = useState<string[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
+
+  useEffect(() => {
+    if (permission && !permission.granted && !askedPermission.current) {
+      askedPermission.current = true;
+      if (permission.canAskAgain) void requestPermission();
+      else router.back();
+    }
+  }, [permission, requestPermission, router]);
 
   const capture = async () => {
     if (!cameraRef.current || capturing) return;
@@ -89,37 +98,8 @@ export default function Scanner() {
     }
   };
 
-  // ---- permission states ----
-  if (!permission) {
-    return <View style={styles.screen} />;
-  }
-  if (!permission.granted) {
-    return (
-      <View style={[styles.screen, styles.permWrap, { paddingTop: insets.top }]}>
-        <Pressable testID="scanner-close" style={styles.permClose} onPress={() => router.back()}>
-          <Icon name="close" size={26} color={colors.onSurface} />
-        </Pressable>
-        <View style={styles.permBox}>
-          <View style={styles.permIcon}>
-            <Icon name="camera" size={44} color={colors.brandPrimary} />
-          </View>
-          <Text style={styles.permTitle}>Scan documents with your camera</Text>
-          <Text style={styles.permText}>
-            File Mind needs camera access to capture and enhance your documents. Photos stay on your device.
-          </Text>
-          {permission.canAskAgain ? (
-            <Pressable testID="scanner-grant" style={styles.permBtn} onPress={() => requestPermission()}>
-              <Text style={styles.permBtnText}>Allow camera</Text>
-            </Pressable>
-          ) : (
-            <Pressable testID="scanner-settings" style={styles.permBtn} onPress={() => Linking.openSettings()}>
-              <Text style={styles.permBtnText}>Open Settings</Text>
-            </Pressable>
-          )}
-        </View>
-      </View>
-    );
-  }
+  // Camera permission is requested automatically; no pre-permission screen is shown.
+  if (!permission?.granted) return null;
 
   return (
     <View style={styles.cameraScreen}>
@@ -203,14 +183,6 @@ const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.surface },
   cameraScreen: { flex: 1, backgroundColor: "#000000" },
   camera: { ...StyleSheetAbsolute() },
-  permWrap: { alignItems: "center", justifyContent: "center" },
-  permClose: { position: "absolute", left: spacing.lg, top: spacing.xl, padding: spacing.sm, zIndex: 2 },
-  permBox: { alignItems: "center", padding: spacing.xxl, gap: spacing.md },
-  permIcon: { width: 96, height: 96, borderRadius: radius.pill, backgroundColor: c.brandSecondary, alignItems: "center", justifyContent: "center" },
-  permTitle: { fontSize: 20, fontWeight: "800", color: c.onSurface, textAlign: "center", marginTop: spacing.md },
-  permText: { fontSize: 14, color: c.muted, textAlign: "center", lineHeight: 21 },
-  permBtn: { marginTop: spacing.md, backgroundColor: c.brandPrimary, paddingHorizontal: spacing.xxl, paddingVertical: spacing.md, borderRadius: radius.pill },
-  permBtnText: { color: c.onBrandPrimary, fontWeight: "700", fontSize: 15 },
   topControls: { position: "absolute", left: spacing.lg, right: spacing.lg, flexDirection: "row", justifyContent: "space-between", zIndex: 3 },
   topRight: { flexDirection: "row", gap: spacing.sm },
   roundBtn: { width: 42, height: 42, borderRadius: radius.pill, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center" },
