@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useDialog } from "@/src/components/dialog";
 import { EmptyState } from "@/src/components/empty-state";
+import { QueryErrorState } from "@/src/components/query-error";
 import { ScreenHeader } from "@/src/components/screen-header";
 import { useToast } from "@/src/components/toast";
 import { ProgressOverlay } from "@/src/components/ui";
@@ -113,7 +114,9 @@ export default function Organize() {
   return (
     <View style={styles.screen}>
       <ScreenHeader title="Smart Organize" subtitle="Review, then confirm — nothing moves automatically" />
-      {plan.isLoading ? (
+      {plan.isError ? (
+        <QueryErrorState onRetry={() => plan.refetch()} message="Could not prepare the organization plan." />
+      ) : plan.isLoading ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.brandPrimary} />
         </View>

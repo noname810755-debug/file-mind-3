@@ -4,10 +4,12 @@ import React, { useEffect, useState } from "react";
 import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { BrandMark } from "@/src/components/brand-mark";
 import { useDialog } from "@/src/components/dialog";
 import { ScreenHeader } from "@/src/components/screen-header";
 import { useToast } from "@/src/components/toast";
 import { Icon, type IconName } from "@/src/icons";
+import { getLocalNotificationStatus, sendTestNotification } from "@/src/lib/notifications";
 import { TMP } from "@/src/lib/fs";
 import { loadThemePref, saveThemePref, type ThemePref } from "@/src/lib/theme-pref";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
@@ -19,6 +21,8 @@ const THEMES: { key: ThemePref; label: string; icon: IconName }[] = [
   { key: "dark", label: "Dark", icon: "moon-waning-crescent" },
 ];
 
+type NotificationStatus = "granted" | "denied" | "unavailable" | "checking";
+
 export default function Settings() {
   const styles = useStyles();
   const { colors } = useTheme();
@@ -27,14 +31,17 @@ export default function Settings() {
   const dialog = useDialog();
   const toast = useToast();
   const [pref, setPref] = useState<ThemePref>("system");
+  const [notificationStatus, setNotificationStatus] = useState<NotificationStatus>("checking");
+  const [notificationBusy, setNotificationBusy] = useState(false);
 
   useEffect(() => {
-    loadThemePref().then(setPref);
+    void loadThemePref().then(setPref).catch(() => setPref("system"));
+    void getLocalNotificationStatus().then(setNotificationStatus).catch(() => setNotificationStatus("unavailable"));
   }, []);
 
   const setTheme = (p: ThemePref) => {
     setPref(p);
-    saveThemePref(p);
+    void saveThemePref(p).catch(() => toast.show("Could not save appearance", "error"));
   };
 
   const clearCache = async () => {
@@ -42,18 +49,55 @@ export default function Settings() {
     if (!ok) return;
     try {
       await FileSystem.deleteAsync(TMP, { idempotent: true });
-      const pdfjs = FileSystem.cacheDirectory + "pdfjs/";
-      await FileSystem.deleteAsync(pdfjs, { idempotent: true });
-    } catch {}
-    toast.show("Cache cleared", "success");
+      const cacheDirectory = FileSystem.cacheDirectory;
+      if (cacheDirectory) await FileSystem.deleteAsync(cacheDirectory + "pdfjs/", { idempotent: true });
+      toast.show("Cache cleared", "success");
+    } catch {
+      toast.show("Could not clear cache", "error");
+    }
   };
 
-  const contact = () => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=File%20Mind%20Support`);
+  const contact = async () => {
+    try {
+      const url = `mailto:${SUPPORT_EMAIL}?subject=File%20Mind%20Support`;
+      if (await Linking.canOpenURL(url)) await Linking.openURL(url);
+      else toast.show(`Email us at ${SUPPORT_EMAIL}`, "info");
+    } catch {
+      toast.show(`Email us at ${SUPPORT_EMAIL}`, "info");
+    }
+  };
+
+  const testNotification = async () => {
+    if (notificationBusy) return;
+    setNotificationBusy(true);
+    try {
+      const result = await sendTestNotification();
+      if (result.ok) {
+        setNotificationStatus("granted");
+        toast.show("Test notification scheduled", "success");
+      } else {
+        setNotificationStatus(result.reason?.includes("available") ? "unavailable" : "denied");
+        toast.show(result.reason || "Notifications are unavailable", "info");
+      }
+    } finally {
+      setNotificationBusy(false);
+    }
+  };
+
+  const notificationLabel = notificationStatus === "granted" ? "Enabled on this device" : notificationStatus === "denied" ? "Permission needed" : notificationStatus === "unavailable" ? "Mobile device only" : "Checking…";
 
   return (
     <View style={styles.screen}>
       <ScreenHeader title="Settings" />
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + spacing.xl, gap: spacing.xl }} showsVerticalScrollIndicator={false}>
+        <View style={styles.brandCard}>
+          <BrandMark size={52} />
+          <View style={styles.brandCopy}>
+            <Text style={styles.brandTitle}>File Mind</Text>
+            <Text style={styles.brandSub}>Private file tools that stay on your device.</Text>
+          </View>
+        </View>
+
         <View>
           <Text style={styles.section}>Appearance</Text>
           <View style={styles.themeRow}>
@@ -80,6 +124,23 @@ export default function Settings() {
         </View>
 
         <View>
+          <Text style={styles.section}>Device notifications</Text>
+          <View style={styles.card}>
+            <View style={styles.notificationRow}>
+              <View style={styles.notificationIcon}><Icon name="bell-outline" size={22} color={colors.brandPrimary} /></View>
+              <View style={styles.notificationCopy}>
+                <Text style={styles.itemLabel}>On-device notifications</Text>
+                <Text style={styles.itemSub}>{notificationLabel}. No account or cloud service is used.</Text>
+              </View>
+            </View>
+            <Pressable testID="set-test-notification" style={styles.notificationButton} onPress={testNotification} disabled={notificationBusy}>
+              <Icon name="bell-ring-outline" size={18} color={colors.onBrandPrimary} />
+              <Text style={styles.notificationButtonText}>{notificationBusy ? "Scheduling…" : "Send test notification"}</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View>
           <Text style={styles.section}>About & support</Text>
           <View style={styles.card}>
             <Item icon="email-outline" label="Contact support" sub={SUPPORT_EMAIL} onPress={contact} testID="set-support" />
@@ -94,21 +155,7 @@ export default function Settings() {
   );
 }
 
-function Item({
-  icon,
-  label,
-  sub,
-  onPress,
-  testID,
-  last,
-}: {
-  icon: IconName;
-  label: string;
-  sub?: string;
-  onPress: () => void;
-  testID: string;
-  last?: boolean;
-}) {
+function Item({ icon, label, sub, onPress, testID, last }: { icon: IconName; label: string; sub?: string; onPress: () => void; testID: string; last?: boolean }) {
   const styles = useStyles();
   const { colors } = useTheme();
   return (
@@ -125,17 +172,26 @@ function Item({
 
 const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.surface },
+  brandCard: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: c.brandSecondary, borderWidth: 1, borderColor: c.brandPrimary + "40" },
+  brandCopy: { flex: 1 },
+  brandTitle: { fontSize: 19, fontWeight: "800", color: c.onSurface },
+  brandSub: { fontSize: 13, color: c.onSurfaceTertiary, marginTop: 3 },
   section: { fontSize: 13, fontWeight: "700", color: c.muted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: spacing.md },
   themeRow: { flexDirection: "row", gap: spacing.md },
   themeCard: { flex: 1, alignItems: "center", gap: spacing.sm, paddingVertical: spacing.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1.5, borderColor: c.border },
   themeCardOn: { borderColor: c.brandPrimary, backgroundColor: c.brandSecondary },
   themeLabel: { fontSize: 13.5, fontWeight: "600", color: c.onSurface },
   card: { backgroundColor: c.surfaceSecondary, borderRadius: radius.lg, borderWidth: 1, borderColor: c.border, overflow: "hidden" },
-  item: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg },
+  item: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, minHeight: 64 },
   itemBorder: { borderBottomWidth: 1, borderBottomColor: c.divider },
   itemLabel: { fontSize: 15.5, fontWeight: "600", color: c.onSurface },
   itemSub: { fontSize: 12.5, color: c.muted, marginTop: 2 },
   offlineNote: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing.md, paddingHorizontal: spacing.xs },
   offlineText: { fontSize: 12.5, color: c.onSurfaceTertiary },
+  notificationRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg },
+  notificationIcon: { width: 42, height: 42, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: c.brandSecondary },
+  notificationCopy: { flex: 1 },
+  notificationButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginHorizontal: spacing.lg, marginBottom: spacing.lg, paddingVertical: spacing.md, minHeight: 48, borderRadius: radius.md, backgroundColor: c.brandPrimary },
+  notificationButtonText: { color: c.onBrandPrimary, fontWeight: "700", fontSize: 14 },
   version: { textAlign: "center", color: c.muted, fontSize: 13 },
 }));

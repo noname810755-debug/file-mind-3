@@ -1,5 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { Asset } from "expo-asset";
 import { useLocalSearchParams } from "expo-router";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import React, { useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, ScrollView, Text, View } from "react-native";
@@ -13,10 +15,38 @@ import { Icon } from "@/src/icons";
 import { getMeta, upsertMeta } from "@/src/lib/db";
 import { baseName, getExt } from "@/src/lib/format";
 import { createFolder, joinDir, listDir, readBase64, ROOT, uniqueName, writeText, TMP } from "@/src/lib/fs";
+
+const TESS_DIR = `${FileSystem.cacheDirectory}tesseract/`;
+const TESS_CORE_DIR = `${TESS_DIR}core/`;
+const TESS_DATA_DIR = `${TESS_DIR}data/`;
+const TESS_ASSETS = [
+  { module: require("../assets/tesseract/tesseract.min.js.tessjs"), target: `${TESS_DIR}tesseract.min.js` },
+  { module: require("../assets/tesseract/worker.min.js.tessjs"), target: `${TESS_DIR}worker.min.js` },
+  { module: require("../assets/tesseract/core/tesseract-core.wasm.js.tessjs"), target: `${TESS_CORE_DIR}tesseract-core.wasm.js` },
+  { module: require("../assets/tesseract/core/tesseract-core-simd.wasm.js.tessjs"), target: `${TESS_CORE_DIR}tesseract-core-simd.wasm.js` },
+  { module: require("../assets/tesseract/core/tesseract-core-lstm.wasm.js.tessjs"), target: `${TESS_CORE_DIR}tesseract-core-lstm.wasm.js` },
+  { module: require("../assets/tesseract/core/tesseract-core-simd-lstm.wasm.js.tessjs"), target: `${TESS_CORE_DIR}tesseract-core-simd-lstm.wasm.js` },
+  { module: require("../assets/tesseract/data/eng.traineddata.gz.tessdata"), target: `${TESS_DATA_DIR}eng.traineddata.gz` },
+  { module: require("../assets/tesseract/data/hin.traineddata.gz.tessdata"), target: `${TESS_DATA_DIR}hin.traineddata.gz` },
+];
+
+async function prepareOcrAssets() {
+  await FileSystem.makeDirectoryAsync(TESS_CORE_DIR, { intermediates: true });
+  await FileSystem.makeDirectoryAsync(TESS_DATA_DIR, { intermediates: true });
+  for (const item of TESS_ASSETS) {
+    const asset = Asset.fromModule(item.module);
+    await asset.downloadAsync();
+    const source = asset.localUri || asset.uri;
+    if (!source) throw new Error("OCR engine asset unavailable");
+    const info = await FileSystem.getInfoAsync(item.target);
+    if (!info.exists) await FileSystem.copyAsync({ from: source, to: item.target });
+  }
+}
+
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
 const OCR_HTML = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="./tesseract.min.js"></script>
 </head><body>
 <script>
 var RN=window.ReactNativeWebView;
@@ -25,6 +55,9 @@ function post(o){try{RN.postMessage(JSON.stringify(o));}catch(e){}}
   if(!window.Tesseract){post({type:'error',message:'engine'});return;}
   try{
     Tesseract.recognize(window.__IMG__, window.__LANG__, {
+      workerPath: window.__WORKER__,
+      corePath: window.__CORE__,
+      langPath: window.__LANGPATH__,
       logger:function(m){ if(m.status==='recognizing text'){ post({type:'progress',progress:m.progress}); } else { post({type:'status',status:m.status}); } }
     }).then(function(r){ post({type:'done', text:(r.data&&r.data.text)||''}); })
       .catch(function(e){ post({type:'error', message:String(e&&e.message)}); });
@@ -46,23 +79,26 @@ export default function Ocr() {
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [assetsReady, setAssetsReady] = useState(false);
   const [runKey, setRunKey] = useState(0);
 
   useEffect(() => {
     (async () => {
       try {
+        if (Platform.OS !== "web") await prepareOcrAssets();
         const b64 = await readBase64(uri);
         const ext = getExt(name) || "jpg";
         const mime = ext === "png" ? "image/png" : "image/jpeg";
         setImgData(`data:${mime};base64,${b64}`);
+        setAssetsReady(true);
       } catch {
-        setError("Could not read image");
+        setError("Could not prepare the offline OCR engine");
       }
     })();
   }, [uri, name]);
 
   const injected = useMemo(
-    () => (imgData ? `window.__IMG__=${JSON.stringify(imgData)};window.__LANG__=${JSON.stringify(lang)};true;` : "true;"),
+    () => (imgData ? `window.__IMG__=${JSON.stringify(imgData)};window.__LANG__=${JSON.stringify(lang)};window.__WORKER__=${JSON.stringify(`${TESS_DIR}worker.min.js`)};window.__CORE__=${JSON.stringify(TESS_CORE_DIR)};window.__LANGPATH__=${JSON.stringify(TESS_DATA_DIR)};true;` : "true;"),
     [imgData, lang],
   );
 
@@ -91,27 +127,35 @@ export default function Ocr() {
 
   const saveTxt = async () => {
     if (!result) return;
-    const ocrDir = ROOT + "OCR/";
-    const rootEntries = await listDir(ROOT).catch(() => []);
-    if (!rootEntries.some((e) => e.isDir && e.name === "OCR")) await createFolder(ROOT, "OCR");
-    const fn = await uniqueName(ocrDir, `${baseName(name)}.txt`);
-    const dest = joinDir(ocrDir, fn);
-    await writeText(dest, result);
-    // index against source file if it lives in the workspace
-    if (uri.startsWith(ROOT)) {
-      const m = await getMeta(uri);
-      await upsertMeta(uri, name, { ocr: result, category: m?.category || "" });
+    try {
+      const ocrDir = ROOT + "OCR/";
+      const rootEntries = await listDir(ROOT).catch(() => []);
+      if (!rootEntries.some((e) => e.isDir && e.name === "OCR")) await createFolder(ROOT, "OCR");
+      const fn = await uniqueName(ocrDir, `${baseName(name)}.txt`);
+      const dest = joinDir(ocrDir, fn);
+      await writeText(dest, result);
+      if (uri.startsWith(ROOT)) {
+        const m = await getMeta(uri);
+        await upsertMeta(uri, name, { ocr: result, category: m?.category || "" });
+      }
+      await upsertMeta(dest, fn, { ocr: result });
+      qc.invalidateQueries({ queryKey: ["files"] });
+      toast.show("Saved as searchable text", "success");
+    } catch {
+      toast.show("Could not save OCR text", "error");
     }
-    await upsertMeta(dest, fn, { ocr: result });
-    qc.invalidateQueries({ queryKey: ["files"] });
-    toast.show("Saved as searchable text", "success");
   };
 
   const share = async () => {
     if (!result) return;
-    const tmp = TMP + `${baseName(name)}.txt`;
-    await writeText(tmp, result);
-    if (await Sharing.isAvailableAsync()) Sharing.shareAsync(tmp);
+    try {
+      const tmp = TMP + `${baseName(name)}.txt`;
+      await writeText(tmp, result);
+      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(tmp);
+      else toast.show("Sharing is not available", "info");
+    } catch {
+      toast.show("Could not share OCR text", "error");
+    }
   };
 
   return (
@@ -127,7 +171,7 @@ export default function Ocr() {
         <View style={styles.center}>
           <Icon name="alert-circle-outline" size={40} color={colors.error} />
           <Text style={styles.centerText}>{error}</Text>
-          <Text style={styles.hint}>OCR downloads its language model once (needs internet the first time), then runs on-device.</Text>
+          <Text style={styles.hint}>OCR runs from the bundled on-device engine. No internet connection is required.</Text>
         </View>
       ) : result === null ? (
         <View style={styles.center}>
@@ -157,11 +201,11 @@ export default function Ocr() {
         </>
       )}
 
-      {imgData && result === null && !error && Platform.OS !== "web" && (
+      {imgData && assetsReady && result === null && !error && Platform.OS !== "web" && (
         <WebView
           key={runKey}
           testID="ocr-webview"
-          source={{ html: OCR_HTML }}
+          source={{ html: OCR_HTML, baseUrl: TESS_DIR }}
           injectedJavaScriptBeforeContentLoaded={injected}
           onMessage={onMessage}
           javaScriptEnabled

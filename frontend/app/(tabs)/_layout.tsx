@@ -8,8 +8,8 @@ import { useTheme } from "@/src/theme";
 export default function TabsLayout() {
   const { colors } = useTheme();
   const icon = (name: IconName, focusedName: IconName) =>
-    function TabIcon({ color, focused }: { color: string; focused: boolean }) {
-      return <Icon name={focused ? focusedName : name} size={25} color={color} />;
+    function TabIcon({ color, focused }: { color: import("react-native").ColorValue; focused: boolean }) {
+      return <Icon name={focused ? focusedName : name} size={25} color={String(color)} />;
     };
   return (
     <Tabs

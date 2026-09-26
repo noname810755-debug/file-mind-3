@@ -1,6 +1,7 @@
 import { addVault, listVault, removeVault, type VaultRow } from "./db";
 import { deleteForever, ensure, joinDir, uniqueName, VAULT } from "./fs";
-import { getKind, type FileEntry } from "./format";
+import { getKind } from "./format";
+import type { FileEntry } from "./fs";
 import * as FileSystem from "expo-file-system/legacy";
 
 export async function addToVault(entry: FileEntry): Promise<VaultRow> {

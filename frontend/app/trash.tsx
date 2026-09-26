@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useDialog } from "@/src/components/dialog";
 import { EmptyState } from "@/src/components/empty-state";
+import { QueryErrorState } from "@/src/components/query-error";
 import { ScreenHeader } from "@/src/components/screen-header";
 import { useToast } from "@/src/components/toast";
 import { Icon } from "@/src/icons";
@@ -78,7 +79,9 @@ export default function Trash() {
         subtitle={items.length ? `${items.length} items` : undefined}
         actions={items.length ? [{ icon: "delete-sweep", onPress: emptyTrash, testID: "trash-empty", tint: colors.error }] : []}
       />
-      {q.isLoading ? (
+      {q.isError ? (
+        <QueryErrorState onRetry={() => q.refetch()} message="Could not read Trash." />
+      ) : q.isLoading ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.brandPrimary} />
         </View>

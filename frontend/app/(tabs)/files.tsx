@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useDialog } from "@/src/components/dialog";
 import { EmptyState } from "@/src/components/empty-state";
+import { QueryErrorState } from "@/src/components/query-error";
 import { FileRow } from "@/src/components/file-row";
 import { FolderPicker } from "@/src/components/folder-picker";
 import { useToast } from "@/src/components/toast";
@@ -429,7 +430,9 @@ export default function Files() {
         </View>
       )}
 
-      {entriesQ.isLoading ? (
+      {entriesQ.isError ? (
+        <QueryErrorState onRetry={() => entriesQ.refetch()} message="Could not read this folder." />
+      ) : entriesQ.isLoading ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.brandPrimary} />
         </View>

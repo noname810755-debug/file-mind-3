@@ -1,11 +1,12 @@
 import * as FileSystem from "expo-file-system/legacy";
+import { Asset } from "expo-asset";
 
+const PDF_JS_BUNDLE = require("../../assets/pdfjs/pdf.min.js.pdfjs");
+const PDF_WORKER_BUNDLE = require("../../assets/pdfjs/pdf.worker.min.js.pdfjs");
 const DIR = FileSystem.cacheDirectory + "pdfjs/";
 const LIB = DIR + "pdf.min.js";
 const WORKER = DIR + "pdf.worker.min.js";
 const VIEWER = DIR + "viewer.html";
-
-const CDN = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/";
 
 const VIEWER_HTML = `<!DOCTYPE html>
 <html>
@@ -92,22 +93,25 @@ async function exists(uri: string) {
   return i.exists && (i as any).size > 0;
 }
 
-// Ensures pdf.js runtime is cached on device. Downloads once (needs network the
-// first time); afterwards the viewer works fully offline.
+async function copyBundledAsset(moduleId: number, destination: string) {
+  const asset = Asset.fromModule(moduleId);
+  await asset.downloadAsync();
+  const source = asset.localUri || asset.uri;
+  if (!source) throw new Error("Bundled PDF engine asset is unavailable");
+  await FileSystem.copyAsync({ from: source, to: destination });
+}
+
+// The PDF engine is bundled with the app. No network request is made.
 export async function ensurePdfJs(): Promise<{ ready: boolean; error?: string }> {
   try {
     await FileSystem.makeDirectoryAsync(DIR, { intermediates: true }).catch(() => {});
-    if (!(await exists(LIB))) {
-      await FileSystem.downloadAsync(CDN + "pdf.min.js", LIB);
-    }
-    if (!(await exists(WORKER))) {
-      await FileSystem.downloadAsync(CDN + "pdf.worker.min.js", WORKER);
-    }
+    if (!(await exists(LIB))) await copyBundledAsset(PDF_JS_BUNDLE, LIB);
+    if (!(await exists(WORKER))) await copyBundledAsset(PDF_WORKER_BUNDLE, WORKER);
     await FileSystem.writeAsStringAsync(VIEWER, VIEWER_HTML);
     const ok = (await exists(LIB)) && (await exists(WORKER));
-    return ok ? { ready: true } : { ready: false, error: "download-failed" };
+    return ok ? { ready: true } : { ready: false, error: "bundled-engine-unavailable" };
   } catch (e: any) {
-    return { ready: false, error: e?.message || "unknown" };
+    return { ready: false, error: e?.message || "bundled-engine-error" };
   }
 }
 

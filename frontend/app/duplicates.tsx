@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useDialog } from "@/src/components/dialog";
 import { EmptyState } from "@/src/components/empty-state";
+import { QueryErrorState } from "@/src/components/query-error";
 import { ScreenHeader } from "@/src/components/screen-header";
 import { useToast } from "@/src/components/toast";
 import { ProgressOverlay } from "@/src/components/ui";
@@ -87,7 +88,9 @@ export default function Duplicates() {
   return (
     <View style={styles.screen}>
       <ScreenHeader title="Duplicate finder" subtitle={groups.length ? `${formatBytes(wasted)} recoverable` : undefined} />
-      {groupsQ.isLoading ? (
+      {groupsQ.isError ? (
+        <QueryErrorState onRetry={() => groupsQ.refetch()} message="Could not scan for duplicate files." />
+      ) : groupsQ.isLoading ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.brandPrimary} />
           <Text style={styles.scanning}>Scanning by content hash…</Text>

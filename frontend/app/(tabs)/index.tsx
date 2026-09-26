@@ -6,6 +6,7 @@ import React from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { BrandMark } from "@/src/components/brand-mark";
 import { EmptyState } from "@/src/components/empty-state";
 import { Icon, type IconName } from "@/src/icons";
 import { Card, SectionHeader, haptic } from "@/src/components/ui";
@@ -72,9 +73,7 @@ export default function Home() {
     <View style={styles.screen}>
       <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
         <View style={styles.brandRow}>
-          <View style={styles.logoBox}>
-            <Icon name="brain" size={22} color={colors.onBrandPrimary} />
-          </View>
+          <BrandMark size={42} />
           <View>
             <Text style={styles.brandName}>File Mind</Text>
             <Text style={styles.brandSub}>Everything, in one place</Text>
@@ -282,14 +281,6 @@ const useStyles = makeStyles((c) => ({
     paddingBottom: spacing.md,
   },
   brandRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  logoBox: {
-    width: 42,
-    height: 42,
-    borderRadius: radius.md,
-    backgroundColor: c.brandPrimary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   brandName: { fontSize: 20, fontWeight: "800", color: c.onSurface },
   brandSub: { fontSize: 12, color: c.muted },
   topIcon: { padding: spacing.xs },

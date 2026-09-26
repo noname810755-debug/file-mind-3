@@ -1,33 +1,35 @@
 {
   "expo": {
-    "name": "frontend",
-    "slug": "frontend",
+    "name": "File Mind",
+    "slug": "file-mind",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "frontend",
+    "scheme": "filemind",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.emergent.filemindai.muv0o1",
+      "bundleIdentifier": "com.filemind.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Scan documents with your camera",
         "NSPhotoLibraryUsageDescription": "Import photos to convert and organize",
         "NSPhotoLibraryAddUsageDescription": "Save scanned documents to your library",
-        "NSFaceIDUsageDescription": "Unlock your private Vault"
+        "NSFaceIDUsageDescription": "Unlock your private Vault",
+        "NSUserNotificationsUsageDescription": "Receive helpful on-device reminders"
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#FF5E00"
       },
-      "package": "com.emergent.filemindai.muv0o1",
+      "package": "com.filemind.app",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.USE_BIOMETRIC",
         "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.READ_MEDIA_VIDEO"
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -43,7 +45,7 @@
           "image": "./assets/images/splash-image.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#000000"
+          "backgroundColor": "#FF5E00"
         }
       ],
       "expo-font",
@@ -53,6 +55,7 @@
       "expo-status-bar",
       "expo-sqlite",
       "expo-sharing",
+      "expo-notifications",
       "@react-native-vector-icons/material-design-icons",
       [
         "expo-camera",
@@ -74,7 +77,8 @@
         }
       ],
       "expo-video",
-      "expo-audio"
+      "expo-audio",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true

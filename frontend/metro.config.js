@@ -21,5 +21,6 @@ config.cacheStores = [
 
 // Reduce the number of workers to decrease resource usage
 config.maxWorkers = 2;
+config.resolver.assetExts = [...new Set([...config.resolver.assetExts, 'wasm', 'pdfjs', 'tessjs', 'tessdata'])];
 
 module.exports = config;

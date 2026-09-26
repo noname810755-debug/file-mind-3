@@ -149,3 +149,50 @@
 ##     -message: "Expo was restarted successfully. Preview is available at http://localhost:3000; screenshot check showed the File Mind home screen."
 ##     -agent: "testing"
 ##     -message: "Smoke test completed successfully. The Expo mobile app is running correctly at http://localhost:3000. File Mind home screen renders properly with all expected UI elements (branding, navigation tabs, quick actions). No blocking errors detected. Only minor deprecation warnings present (React Native Web shadow* and pointerEvents props) which do not affect functionality. App is ready for use."
+
+
+## user_problem_statement: Production-readiness pass for the offline File Mind mobile app
+## backend:
+##   - task: "Backend remains unused for offline-only product"
+##     implemented: true
+##     working: "NA"
+##     file: "/app/backend/server.py"
+##     stuck_count: 0
+##     priority: "low"
+##     needs_retesting: true
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "User explicitly requested no backend or cloud dependency; backend was not modified and must not be used by the mobile app."
+##
+## frontend:
+##   - task: "Offline production-readiness, branding, startup, legal pages, notifications, error handling, performance, and keyboard behavior"
+##     implemented: true
+##     working: "NA"
+##     file: "/app/frontend/app/_layout.tsx"
+##     stuck_count: 0
+##     priority: "high"
+##     needs_retesting: true
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "Removed app-controlled startup splash/font gate, replaced Emergent branding/assets with File Mind branding, bundled PDF/OCR assets for offline use, added local-only notification handling, legal pages, query error states, retry defaults, and TypeScript/lint fixes."
+##
+## metadata:
+##   created_by: "main_agent"
+##   version: "2.0"
+##   test_sequence: 3
+##   run_ui: true
+##
+## test_plan:
+##   current_focus:
+##     - "Backend smoke check confirms no required API dependency"
+##     - "Full frontend smoke and end-to-end navigation across Home, Files, PDF, AI, Tools, Scanner, OCR, Vault, Trash, Storage, Organize, Duplicates, Settings, Privacy, Terms"
+##     - "Verify direct Home launch, no Expo error overlay, responsive layout, keyboard handling, and local notification settings flow"
+##   stuck_tasks: []
+##   test_all: true
+##   test_priority: "high_first"
+##
+## agent_communication:
+##     -agent: "main"
+##     -message: "Production-readiness changes are implemented. Expo export and TypeScript checks are passing; backend testing must run first per protocol, followed by frontend end-to-end testing."

@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useDialog } from "@/src/components/dialog";
 import { EmptyState } from "@/src/components/empty-state";
+import { QueryErrorState } from "@/src/components/query-error";
 import { useToast } from "@/src/components/toast";
 import { Icon, type IconName } from "@/src/icons";
 import { ProgressOverlay, haptic } from "@/src/components/ui";
@@ -189,7 +190,9 @@ export default function PdfWorkspace() {
         </View>
       )}
 
-      {pdfsQ.isLoading ? (
+      {pdfsQ.isError ? (
+        <QueryErrorState onRetry={() => pdfsQ.refetch()} message="Could not scan your local PDFs." />
+      ) : pdfsQ.isLoading ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.brandPrimary} />
         </View>

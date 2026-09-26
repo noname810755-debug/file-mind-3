@@ -48,7 +48,7 @@ export async function listDir(dir: string): Promise<FileEntry[]> {
   for (const name of names) {
     if (name.startsWith(".")) continue; // hidden (trash etc.)
     const uri = joinDir(dir, name);
-    const info = await FileSystem.getInfoAsync(uri, { size: true });
+    const info = await FileSystem.getInfoAsync(uri);
     if (!info.exists) continue;
     const isDir = !!info.isDirectory;
     entries.push({
@@ -77,7 +77,7 @@ export async function statFolderSize(dir: string): Promise<number> {
     }
     for (const n of names) {
       const uri = joinDir(d, n);
-      const info = await FileSystem.getInfoAsync(uri, { size: true });
+      const info = await FileSystem.getInfoAsync(uri);
       if (!info.exists) continue;
       if (info.isDirectory) stack.push(uri);
       else total += (info as any).size ?? 0;
@@ -187,7 +187,7 @@ export async function readBase64(uri: string) {
 }
 
 export async function getInfo(uri: string) {
-  return FileSystem.getInfoAsync(uri, { size: true });
+  return FileSystem.getInfoAsync(uri);
 }
 
 export async function importInto(destDir: string, srcUri: string, name: string) {

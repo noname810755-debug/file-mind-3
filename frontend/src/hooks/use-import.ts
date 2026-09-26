@@ -19,16 +19,21 @@ export function useImport() {
         });
         if (res.canceled || !res.assets?.length) return [];
         const created: string[] = [];
+        const failed: string[] = [];
         for (const a of res.assets) {
           const name = a.name || `file-${Date.now()}`;
           try {
             const to = await importInto(destDir, a.uri, name);
             created.push(to);
-          } catch {}
+          } catch {
+            failed.push(name);
+          }
         }
         qc.invalidateQueries({ queryKey: ["files"] });
         qc.invalidateQueries({ queryKey: ["home"] });
-        toast.show(`Imported ${created.length} file${created.length === 1 ? "" : "s"}`, "success");
+        if (!created.length) toast.show("No files could be imported", "error");
+        else if (failed.length) toast.show(`Imported ${created.length}; skipped ${failed.length}`, "info");
+        else toast.show(`Imported ${created.length} file${created.length === 1 ? "" : "s"}`, "success");
         return created;
       } catch (e: any) {
         toast.show("Import failed", "error");

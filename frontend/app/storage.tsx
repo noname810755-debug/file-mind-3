@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-nati
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ScreenHeader } from "@/src/components/screen-header";
+import { QueryErrorState } from "@/src/components/query-error";
 import { Card } from "@/src/components/ui";
 import { Icon } from "@/src/icons";
 import { useFileOpener } from "@/src/hooks/use-file-opener";
@@ -50,7 +51,9 @@ export default function Storage() {
   return (
     <View style={styles.screen}>
       <ScreenHeader title="Storage" />
-      {data.isLoading ? (
+      {data.isError ? (
+        <QueryErrorState onRetry={() => data.refetch()} message="Could not analyze local storage." />
+      ) : data.isLoading ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.brandPrimary} />
         </View>

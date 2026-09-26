@@ -58,7 +58,14 @@ async function open(): Promise<SQLite.SQLiteDatabase> {
 
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (_db) return _db;
-  if (!_init) _init = open().then((db) => (_db = db));
+  if (!_init) {
+    _init = open()
+      .then((db) => (_db = db))
+      .catch((error) => {
+        _init = null;
+        throw error;
+      });
+  }
   return _init;
 }
 

@@ -120,9 +120,9 @@ export type Entities = {
 };
 
 export function extractEntities(text: string): Entities {
-  const dates = [
-    ...new Set(
-      (text.match(/\b(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4})\b/g) || []).concat(
+  const dates: string[] = [
+    ...new Set<string>(
+      (text.match(/\b(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4})\b/g) || [] as string[]).concat(
         text.match(/\b(\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{2,4})\b/gi) || [],
       ),
     ),

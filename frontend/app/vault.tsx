@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useDialog } from "@/src/components/dialog";
 import { EmptyState } from "@/src/components/empty-state";
+import { QueryErrorState } from "@/src/components/query-error";
 import { ScreenHeader } from "@/src/components/screen-header";
 import { useToast } from "@/src/components/toast";
 import { Fab, ProgressOverlay } from "@/src/components/ui";
@@ -57,7 +58,7 @@ export default function Vault() {
       });
       if (res.success) setUnlocked(true);
     } catch {
-      // ignore
+      toast.show("Could not unlock Vault", "error");
     } finally {
       setChecking(false);
     }
@@ -78,7 +79,7 @@ export default function Vault() {
         const stored = `${id}__${a.name}`;
         const vaultPath = joinDir(VAULT, stored);
         await FileSystem.copyAsync({ from: a.uri, to: vaultPath });
-        const info = await FileSystem.getInfoAsync(vaultPath, { size: true });
+        const info = await FileSystem.getInfoAsync(vaultPath);
         await addVault({
           id,
           name: a.name || "file",
@@ -90,6 +91,8 @@ export default function Vault() {
       }
       qc.invalidateQueries({ queryKey: ["vault"] });
       toast.show("Added to Vault", "success");
+    } catch {
+      toast.show("Could not add files to Vault", "error");
     } finally {
       setBusy(null);
     }
@@ -148,7 +151,9 @@ export default function Vault() {
   return (
     <View style={styles.screen}>
       <ScreenHeader title="Secure Vault" subtitle={`${itemsQ.data?.length ?? 0} protected items`} />
-      {itemsQ.isLoading ? (
+      {itemsQ.isError ? (
+        <QueryErrorState onRetry={() => itemsQ.refetch()} message="Could not open the Vault." />
+      ) : itemsQ.isLoading ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.brandPrimary} />
         </View>

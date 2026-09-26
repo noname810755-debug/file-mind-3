@@ -16,4 +16,4 @@ export function Icon({
 }
 
 export type { IconName };
-export const iconFont = MaterialDesignIcons.font;
+export const iconFont = (MaterialDesignIcons as any).font;

@@ -54,7 +54,7 @@ function VideoPreview({ uri }: { uri: string }) {
   });
   return (
     <View style={styles.mediaWrap}>
-      <VideoView style={styles.video} player={player} allowsFullscreen contentFit="contain" testID="viewer-video" />
+      <VideoView style={styles.video} player={player} contentFit="contain" testID="viewer-video" />
     </View>
   );
 }
